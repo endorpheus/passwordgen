@@ -82,6 +82,7 @@ private:
     bool enforceMinimum = true;
     bool avoidSimilar = false;
     int clipboardTimeout = 0; // seconds, 0 = disabled
+    bool showStrengthMeter = true; // Show strength meter by default
     
     // Initialize random generator with strong entropy
     void initSecureRandom() {
@@ -140,63 +141,41 @@ public:
         initSecureRandom();
     }
     
-    // Parse command line arguments
-    bool parseArgs(int argc, char* argv[]) {
-        int opt;
-        while ((opt = getopt(argc, argv, "l:p:udsSmha")) != -1) {
-            switch (opt) {
-                case 'l': // length
-                    length = std::stoi(optarg);
-                    if (length < 8) {
-                        std::cerr << "Warning: Password length less than 8 is not recommended." << std::endl;
-                        length = 8;
-                    }
-                    break;
-                case 'p': // clipboard timeout
-                    clipboardTimeout = std::stoi(optarg);
-                    if (clipboardTimeout < 0) {
-                        clipboardTimeout = 0;
-                    }
-                    break;
-                case 'u': // uppercase only
-                    useUpper = true;
-                    useLower = false;
-                    useDigits = false;
-                    useSpecial = false;
-                    break;
-                case 'd': // digits only
-                    useUpper = false;
-                    useLower = false;
-                    useDigits = true;
-                    useSpecial = false;
-                    break;
-                case 's': // no special chars
-                    useSpecial = false;
-                    break;
-                case 'S': // avoid similar chars
-                    avoidSimilar = true;
-                    break;
-                case 'm': // don't enforce minimum chars
-                    enforceMinimum = false;
-                    break;
-                case 'a': // alphanumeric only (no special)
-                    useSpecial = false;
-                    break;
-                case 'h': // help
-                    showHelp();
-                    return false;
-                default:
-                    showHelp();
-                    return false;
-            }
-        }
+    // Setters for configuration
+    void setLength(int value) { 
+        length = value; 
+    }
+    
+    void setClipboardTimeout(int value) { 
+        clipboardTimeout = value; 
+    }
+    
+    void setCharSets(bool upper, bool lower, bool digits, bool special) {
+        useUpper = upper;
+        useLower = lower;
+        useDigits = digits;
+        useSpecial = special;
         
-        // Ensure at least one character set is selected
+        // Ensure at least one character set is enabled
         if (!useUpper && !useLower && !useDigits && !useSpecial) {
-            useLower = true; // Default to lowercase if nothing selected
+            useLower = true;
         }
-        
-        return true;
+    }
+    
+    void setSpecialChars(bool enabled) { 
+        useSpecial = enabled; 
+    }
+    
+    void setAvoidSimilar(bool enabled) { 
+        avoidSimilar = enabled; 
+    }
+    
+    void setEnforceMinimum(bool enabled) { 
+        enforceMinimum = enabled; 
+    }
+    
+    void setShowStrengthMeter(bool enabled) { 
+        showStrengthMeter = enabled; 
     }
     
     // Generate a secure password based on current settings
@@ -285,6 +264,7 @@ public:
                   << "  -s           No special characters" << std::endl
                   << "  -S           Avoid similar characters (I, l, 1, O, 0)" << std::endl
                   << "  -m           Don't enforce minimum character types" << std::endl
+                  << "  -n           Disable password strength meter" << std::endl
                   << "  -a           Alphanumeric only (same as -s)" << std::endl
                   << "  -h           Show this help message" << std::endl;
     }
@@ -326,33 +306,170 @@ public:
     
     // Display password with strength info
     void displayPassword(const std::string& password) {
-        int strength = calculateStrength(password);
-        std::string rating = getStrengthDescription(strength);
-        
+        // Always show the password
         std::cout << password << std::endl;
-        std::cout << "Strength: " << strength << "/100 (" << rating << ")" << std::endl;
+        
+        // Show strength meter if enabled
+        if (showStrengthMeter) {
+            int strength = calculateStrength(password);
+            std::string rating = getStrengthDescription(strength);
+            std::cout << "Strength: " << strength << "/100 (" << rating << ")" << std::endl;
+        }
         
         // Handle clipboard if timeout is set
         if (clipboardTimeout > 0) {
             handleClipboard(password);
         }
     }
-    
-    // Get settings
-    int getClipboardTimeout() const {
-        return clipboardTimeout;
-    }
 };
 
+// Custom command-line argument parser to handle errors better than getopt
+void parseCommandLine(int argc, char* argv[], PasswordGenerator& generator) {
+    for (int i = 1; i < argc; i++) {
+        std::string arg = argv[i];
+        
+        // Check if it's an option (starts with -)
+        if (arg[0] == '-') {
+            // Single character options
+            if (arg.length() == 2) {
+                char option = arg[1];
+                
+                switch (option) {
+                    case 'l': // length
+                        if (i + 1 < argc && argv[i+1][0] != '-') {
+                            try {
+                                int length = std::stoi(argv[++i]);
+                                if (length < 8) {
+                                    std::cerr << "Warning: Password length less than 8 is not recommended." << std::endl;
+                                    length = 8;
+                                }
+                                generator.setLength(length);
+                            } catch (const std::exception& e) {
+                                std::cerr << "Error: Invalid length parameter. Using default length." << std::endl;
+                            }
+                        } else {
+                            std::cerr << "Error: -l option requires a numeric argument. Using default length." << std::endl;
+                        }
+                        break;
+                        
+                    case 'p': // clipboard timeout
+                        if (i + 1 < argc && argv[i+1][0] != '-') {
+                            try {
+                                int timeout = std::stoi(argv[++i]);
+                                if (timeout < 0) timeout = 0;
+                                generator.setClipboardTimeout(timeout);
+                            } catch (const std::exception& e) {
+                                std::cerr << "Error: Invalid clipboard timeout. Clipboard feature disabled." << std::endl;
+                            }
+                        } else {
+                            std::cerr << "Error: -p option requires a numeric argument. Clipboard feature disabled." << std::endl;
+                        }
+                        break;
+                        
+                    case 'u': // uppercase only
+                        generator.setCharSets(true, false, false, false);
+                        break;
+                        
+                    case 'd': // digits only
+                        generator.setCharSets(false, false, true, false);
+                        break;
+                        
+                    case 's': // no special chars
+                        generator.setSpecialChars(false);
+                        break;
+                        
+                    case 'S': // avoid similar chars
+                        generator.setAvoidSimilar(true);
+                        break;
+                        
+                    case 'm': // don't enforce minimum chars
+                        generator.setEnforceMinimum(false);
+                        break;
+                        
+                    case 'n': // disable strength meter
+                        generator.setShowStrengthMeter(false);
+                        break;
+                        
+                    case 'a': // alphanumeric only (no special)
+                        generator.setSpecialChars(false);
+                        break;
+                        
+                    case 'h': // help
+                        generator.showHelp();
+                        exit(0);
+                        break;
+                        
+                    default:
+                        std::cerr << "Warning: Unknown option -" << option << " ignored." << std::endl;
+                        break;
+                }
+            }
+            // Handle multiple options in a single argument (e.g., -aS)
+            else if (arg.length() > 2) {
+                for (size_t j = 1; j < arg.length(); j++) {
+                    char option = arg[j];
+                    
+                    switch (option) {
+                        case 'u': 
+                            generator.setCharSets(true, false, false, false);
+                            break;
+                        case 'd': 
+                            generator.setCharSets(false, false, true, false);
+                            break;
+                        case 's': 
+                            generator.setSpecialChars(false);
+                            break;
+                        case 'S': 
+                            generator.setAvoidSimilar(true);
+                            break;
+                        case 'm': 
+                            generator.setEnforceMinimum(false);
+                            break;
+                        case 'n': 
+                            generator.setShowStrengthMeter(false);
+                            break;
+                        case 'a': 
+                            generator.setSpecialChars(false);
+                            break;
+                        case 'h': 
+                            generator.showHelp();
+                            exit(0);
+                            break;
+                        case 'l': 
+                        case 'p': 
+                            std::cerr << "Warning: Options -l and -p require values and cannot be grouped." << std::endl;
+                            break;
+                        default:
+                            std::cerr << "Warning: Unknown option -" << option << " ignored." << std::endl;
+                            break;
+                    }
+                }
+            }
+        } else {
+            // Non-option argument - not supported
+            std::cerr << "Warning: Unexpected argument '" << arg << "' ignored." << std::endl;
+        }
+    }
+}
+
 int main(int argc, char* argv[]) {
-    PasswordGenerator generator;
-    
-    if (!generator.parseArgs(argc, argv)) {
+    try {
+        PasswordGenerator generator;
+        
+        if (argc > 1) {
+            // Use custom argument parser for better error handling
+            parseCommandLine(argc, argv, generator);
+        }
+        
+        std::string password = generator.generate();
+        generator.displayPassword(password);
+        
+        return 0;
+    } catch (const std::exception& e) {
+        std::cerr << "Error: An unexpected error occurred: " << e.what() << std::endl;
+        return 1;
+    } catch (...) {
+        std::cerr << "Error: An unknown error occurred." << std::endl;
         return 1;
     }
-    
-    std::string password = generator.generate();
-    generator.displayPassword(password);
-    
-    return 0;
 }
