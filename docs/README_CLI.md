@@ -100,7 +100,7 @@ Secure Password Generator - Usage:
   pwgen [options]
 
 Options:
-  -l <length>  Set password length (default: 16)
+  -l <length>  Set password length (default: 16, minimum: 8, sweet-spot: 17+)
   -p <seconds> Copy to clipboard and clear after timeout
   -u           Uppercase letters only
   -d           Digits only
