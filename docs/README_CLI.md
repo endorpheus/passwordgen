@@ -109,6 +109,7 @@ Options:
   -m           Don't enforce minimum character types
   -a           Alphanumeric only (same as -s)
   -h           Show this help message
+  -n           No password strength quality meter (this can be helpful for external scripting)
 ```
 
 ## Examples
@@ -226,4 +227,7 @@ Based on secure password generation best practices and modern C++ standards.
 
 Compile CLI (pwgen)
 
+Change to the cli directory, then do:
+```
 g++ -o pwgen pwgen.cpp -std=c++11
+```
